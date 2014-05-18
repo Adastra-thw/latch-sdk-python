@@ -20,6 +20,7 @@
 
 import json
 import logging
+import requests
 
 class Error(object):
 
@@ -121,7 +122,6 @@ class Latch(object):
     API_PORT = 443;
     API_HTTPS = True
     API_PROXY = None;
-    API_PROXY_PORT = None;
     API_CHECK_STATUS_URL = "/api/0.6/status";
     API_PAIR_URL = "/api/0.6/pair";
     API_PAIR_WITH_ID_URL = "/api/0.6/pairWithId";
@@ -153,14 +153,13 @@ class Latch(object):
             Latch.API_HTTPS = True
 
     @staticmethod
-    def set_proxy(proxy, port):
+    def set_proxy(proxy):
         '''
         Enable using a Proxy to connect through
         @param $proxy The proxy server
         @param $port The proxy port number
         '''
         Latch.API_PROXY = proxy
-        Latch.API_PROXY_PORT = port
 
     @staticmethod
     def get_part_from_header(part, header):
@@ -210,7 +209,7 @@ class Latch(object):
         '''
         self.appId = appId
         self.secretKey = secretKey
-
+        self.proxies = {}
 
 
 
@@ -221,38 +220,22 @@ class Latch(object):
         @param $string $xHeaders
         @return LatchResponse
         '''
-        try:
-            # Try to use the new Python3 HTTP library if available
-            import http.client as http
-        except:
-            # Must be using Python2 so use the appropriate library
-            import httplib as http
-
         authHeaders = self.authentication_headers("GET", url, xHeaders)
-        #print(headers)
         if Latch.API_PROXY != None:
-            if Latch.API_HTTPS:
-                conn = http.HTTPSConnection(Latch.API_PROXY, Latch.API_PROXY_PORT)
-                conn.set_tunnel(Latch.API_HOST, Latch.API_PORT) 
+            if Latch.API_PROXY.startswith("https://"):
+                self.proxies = {'https':Latch.API_PROXY}
             else: 
-                conn = http.HTTPConnection(Latch.API_PROXY, Latch.API_PROXY_PORT)
-                url = "http://" + Latch.API_HOST + url                  
-        else:
-            if Latch.API_HTTPS:
-                conn = http.HTTPSConnection(Latch.API_HOST, Latch.API_PORT)
-            else: 
-                conn = http.HTTPConnection(Latch.API_HOST, Latch.API_PORT)
-
+                self.proxies = {'http':Latch.API_PROXY}
         try:
-            conn.request("GET", url, headers=authHeaders)
-            response = conn.getresponse()
-           
-            responseData = response.read().decode('utf8')
-            #print("response:" + responseData)
-            conn.close();
+            if Latch.API_HTTPS:
+                response = requests.get('https://'+Latch.API_HOST+':'+str(Latch.API_PORT)+url, headers=authHeaders, proxies=self.proxies)
+            else:
+                response = requests.get('http://'+Latch.API_HOST+':'+str(Latch.API_PORT)+url, headers=authHeaders, proxies=self.proxies)
+            responseData = response.content.decode('utf8')
             ret = LatchResponse(responseData)
-        except:
-            ret = LatchResponse("{}")
+        except Exception, e:
+            error = "{'exception':'%s'}" %(e.message)		
+            ret = LatchResponse(error)
 
         return ret
         
